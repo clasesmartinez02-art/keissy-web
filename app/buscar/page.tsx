@@ -1,0 +1,378 @@
+export const dynamic = "force-dynamic";
+"use client"
+
+import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
+import { Header } from "@/components/header"
+import { InternalLayout } from "@/components/internal-layout"
+import { Book, Tv, Image, Search, Loader2, Globe, Database, Plus, Check, ExternalLink } from "lucide-react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+
+type SearchResult = {
+  id: string
+  title: string
+  type: "book" | "series" | "gallery"
+  image_url?: string
+  description?: string
+  source: "local" | "openlib" | "tmdb"
+  year?: string
+  author?: string
+  rating?: string
+  external_id?: string
+}
+
+export default function BuscarPage() {
+  const searchParams = useSearchParams()
+  const query = searchParams.get("q") || ""
+  const [results, setResults] = useState<SearchResult[]>([])
+  const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<"all" | "books" | "series" | "local">("all")
+  const [addedItems, setAddedItems] = useState<Set<string>>(new Set())
+  const supabase = createClient()
+
+  useEffect(() => {
+    async function search() {
+      if (!query.trim()) {
+        setResults([])
+        return
+      }
+
+      setLoading(true)
+      const searchTerm = `%${query}%`
+      const allResults: SearchResult[] = []
+
+      // 1. Buscar en base de datos local
+      const { data: books } = await supabase
+        .from("books")
+        .select("id, title, cover_url, description")
+        .ilike("title", searchTerm)
+
+      const { data: series } = await supabase
+        .from("series")
+        .select("id, title, image_url, description")
+        .ilike("title", searchTerm)
+
+      const { data: gallery } = await supabase
+        .from("gallery_images")
+        .select("id, title, image_url")
+        .ilike("title", searchTerm)
+
+      // Agregar resultados locales
+      allResults.push(
+        ...(books || []).map(b => ({ 
+          id: b.id, 
+          title: b.title, 
+          type: "book" as const, 
+          image_url: b.cover_url,
+          description: b.description,
+          source: "local" as const
+        })),
+        ...(series || []).map(s => ({ 
+          id: s.id, 
+          title: s.title, 
+          type: "series" as const, 
+          image_url: s.image_url,
+          description: s.description,
+          source: "local" as const
+        })),
+        ...(gallery || []).map(g => ({ 
+          id: g.id, 
+          title: g.title || "Sin titulo", 
+          type: "gallery" as const, 
+          image_url: g.image_url,
+          source: "local" as const
+        })),
+      )
+
+      // 2. Buscar en Open Library (libros del mundo)
+      try {
+        const openLibRes = await fetch(
+          `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=12`
+        )
+        const openLibData = await openLibRes.json()
+        
+        if (openLibData.docs) {
+          allResults.push(
+            ...openLibData.docs.slice(0, 12).map((doc: any) => ({
+              id: `openlib-${doc.key}`,
+              external_id: doc.key,
+              title: doc.title,
+              type: "book" as const,
+              image_url: doc.cover_i 
+                ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`
+                : undefined,
+              description: doc.first_sentence?.[0] || `Por ${doc.author_name?.[0] || 'Autor desconocido'}`,
+              author: doc.author_name?.[0],
+              year: doc.first_publish_year?.toString(),
+              source: "openlib" as const
+            }))
+          )
+        }
+      } catch (error) {
+        console.error("Error buscando en Open Library:", error)
+      }
+
+      // 3. Buscar en TMDB (series del mundo)
+      try {
+        const tmdbRes = await fetch(
+          `https://api.themoviedb.org/3/search/tv?api_key=2f4e503a7b0a46f7a7a0b1c2d3e4f5a6&query=${encodeURIComponent(query)}&language=es-ES`
+        )
+        const tmdbData = await tmdbRes.json()
+        
+        if (tmdbData.results) {
+          allResults.push(
+            ...tmdbData.results.slice(0, 12).map((show: any) => ({
+              id: `tmdb-${show.id}`,
+              external_id: show.id.toString(),
+              title: show.name,
+              type: "series" as const,
+              image_url: show.poster_path 
+                ? `https://image.tmdb.org/t/p/w300${show.poster_path}`
+                : undefined,
+              description: show.overview?.slice(0, 150) + (show.overview?.length > 150 ? "..." : ""),
+              year: show.first_air_date?.split("-")[0],
+              rating: show.vote_average?.toFixed(1),
+              source: "tmdb" as const
+            }))
+          )
+        }
+      } catch (error) {
+        console.error("Error buscando en TMDB:", error)
+      }
+
+      setResults(allResults)
+      setLoading(false)
+    }
+
+    search()
+  }, [query])
+
+  // Agregar libro/serie a mi coleccion
+  async function addToCollection(item: SearchResult) {
+    if (item.type === "book") {
+      const { error } = await supabase.from("books").insert({
+        title: item.title,
+        description: item.description || "",
+        cover_url: item.image_url || "",
+        category: "fantasia"
+      })
+      if (!error) {
+        setAddedItems(prev => new Set([...prev, item.id]))
+      }
+    } else if (item.type === "series") {
+      const { error } = await supabase.from("series").insert({
+        title: item.title,
+        description: item.description || "",
+        image_url: item.image_url || "",
+        year: item.year,
+        rating: item.rating,
+        icon: "📺",
+        tags: ["agregada"]
+      })
+      if (!error) {
+        setAddedItems(prev => new Set([...prev, item.id]))
+      }
+    }
+  }
+
+  const getIcon = (type: string) => {
+    switch (type) {
+      case "book": return <Book className="h-5 w-5" />
+      case "series": return <Tv className="h-5 w-5" />
+      case "gallery": return <Image className="h-5 w-5" />
+      default: return null
+    }
+  }
+
+  const getSourceBadge = (source: string) => {
+    switch (source) {
+      case "local": return <span className="flex items-center gap-1 rounded-full bg-primary/20 px-2 py-0.5 text-xs text-primary"><Database className="h-3 w-3" /> Mi Coleccion</span>
+      case "openlib": return <span className="flex items-center gap-1 rounded-full bg-blue-500/20 px-2 py-0.5 text-xs text-blue-400"><Globe className="h-3 w-3" /> Open Library</span>
+      case "tmdb": return <span className="flex items-center gap-1 rounded-full bg-green-500/20 px-2 py-0.5 text-xs text-green-400"><Globe className="h-3 w-3" /> TMDB</span>
+      default: return null
+    }
+  }
+
+  const filteredResults = results.filter(r => {
+    if (activeTab === "all") return true
+    if (activeTab === "books") return r.type === "book"
+    if (activeTab === "series") return r.type === "series"
+    if (activeTab === "local") return r.source === "local"
+    return true
+  })
+
+  const localCount = results.filter(r => r.source === "local").length
+  const booksCount = results.filter(r => r.type === "book").length
+  const seriesCount = results.filter(r => r.type === "series").length
+
+  return (
+    <InternalLayout>
+      <Header />
+      <main className="container mx-auto px-4 py-12">
+        <div className="mb-8 text-center">
+          <h1 className="mb-2 font-serif text-3xl font-bold text-foreground">
+            <Search className="mr-2 inline h-8 w-8 text-primary" />
+            Busqueda Global
+          </h1>
+          {query && (
+            <p className="text-muted-foreground">
+              Buscando: <span className="text-primary font-semibold">"{query}"</span>
+            </p>
+          )}
+          <p className="mt-2 text-sm text-muted-foreground">
+            Busca en millones de libros y series de todo el mundo
+          </p>
+        </div>
+
+        {/* Tabs de filtro */}
+        {results.length > 0 && (
+          <div className="mb-6 flex flex-wrap justify-center gap-2">
+            <Button
+              variant={activeTab === "all" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveTab("all")}
+              className="rounded-full"
+            >
+              Todos ({results.length})
+            </Button>
+            <Button
+              variant={activeTab === "books" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveTab("books")}
+              className="rounded-full"
+            >
+              <Book className="mr-1 h-4 w-4" /> Libros ({booksCount})
+            </Button>
+            <Button
+              variant={activeTab === "series" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveTab("series")}
+              className="rounded-full"
+            >
+              <Tv className="mr-1 h-4 w-4" /> Series ({seriesCount})
+            </Button>
+            <Button
+              variant={activeTab === "local" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveTab("local")}
+              className="rounded-full"
+            >
+              <Database className="mr-1 h-4 w-4" /> Mi Coleccion ({localCount})
+            </Button>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="mt-4 text-muted-foreground">Buscando en el mundo...</p>
+          </div>
+        ) : filteredResults.length > 0 ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {filteredResults.map((result) => (
+              <div
+                key={result.id}
+                className="group relative flex flex-col rounded-xl border border-border/50 bg-card/50 overflow-hidden transition-all hover:border-primary/50 hover:bg-card hover:shadow-lg hover:shadow-primary/10"
+              >
+                {/* Imagen */}
+                <div className="relative aspect-[3/4] w-full overflow-hidden bg-secondary">
+                  {result.image_url ? (
+                    <img
+                      src={result.image_url}
+                      alt={result.title}
+                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center">
+                      {getIcon(result.type)}
+                    </div>
+                  )}
+                  
+                  {/* Badge de tipo */}
+                  <div className="absolute left-2 top-2">
+                    {getSourceBadge(result.source)}
+                  </div>
+
+                  {/* Boton agregar (solo para externos) */}
+                  {result.source !== "local" && (
+                    <div className="absolute right-2 top-2">
+                      <Button
+                        size="sm"
+                        variant={addedItems.has(result.id) ? "secondary" : "default"}
+                        className="h-8 w-8 rounded-full p-0"
+                        onClick={() => addToCollection(result)}
+                        disabled={addedItems.has(result.id)}
+                      >
+                        {addedItems.has(result.id) ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Plus className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Info */}
+                <div className="flex flex-1 flex-col p-4">
+                  <div className="mb-1 flex items-center gap-2 text-primary">
+                    {getIcon(result.type)}
+                    <span className="text-xs uppercase">
+                      {result.type === "book" ? "Libro" : result.type === "series" ? "Serie" : "Galeria"}
+                    </span>
+                    {result.year && (
+                      <span className="text-xs text-muted-foreground">({result.year})</span>
+                    )}
+                    {result.rating && (
+                      <span className="ml-auto text-xs text-yellow-500">★ {result.rating}</span>
+                    )}
+                  </div>
+                  
+                  <h3 className="font-semibold text-foreground line-clamp-2">
+                    {result.title}
+                  </h3>
+                  
+                  {result.author && (
+                    <p className="mt-1 text-sm text-primary/80">{result.author}</p>
+                  )}
+                  
+                  {result.description && (
+                    <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">
+                      {result.description}
+                    </p>
+                  )}
+
+                  {/* Link si es local */}
+                  {result.source === "local" && (
+                    <Link
+                      href={result.type === "book" ? "/libros" : result.type === "series" ? "/series" : "/galeria"}
+                      className="mt-auto pt-3 flex items-center gap-1 text-sm text-primary hover:underline"
+                    >
+                      Ver en mi coleccion <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : query ? (
+          <div className="py-12 text-center">
+            <Globe className="mx-auto mb-4 h-16 w-16 text-muted-foreground/50" />
+            <p className="text-muted-foreground">No se encontraron resultados para "{query}"</p>
+            <p className="mt-2 text-sm text-muted-foreground">Intenta con otras palabras clave</p>
+          </div>
+        ) : (
+          <div className="py-12 text-center">
+            <Search className="mx-auto mb-4 h-16 w-16 text-muted-foreground/50" />
+            <p className="text-muted-foreground">Escribe algo en el buscador para comenzar</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Puedes buscar libros, series, peliculas y mas
+            </p>
+          </div>
+        )}
+      </main>
+    </InternalLayout>
+  )
+}
