@@ -9,17 +9,24 @@ import { Footer } from "@/components/footer";
 
 export const dynamic = "force-dynamic";
 
+type ResultItem = {
+  id: string | number;
+  titulo: string;
+};
+
 export default function BuscarPage() {
   const searchParams = useSearchParams();
   const query = searchParams.get("q") || "";
 
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<ResultItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const supabase = createClient();
 
   useEffect(() => {
     const fetchResults = async () => {
+      setLoading(true);
+
       if (!query) {
         setResults([]);
         setLoading(false);
@@ -32,7 +39,7 @@ export default function BuscarPage() {
         .ilike("titulo", `%${query}%`);
 
       if (!error && data) {
-        setResults(data);
+        setResults(data as ResultItem[]);
       } else {
         setResults([]);
       }
@@ -58,7 +65,7 @@ export default function BuscarPage() {
             <p>No se encontraron resultados.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {results.map((item: any) => (
+              {results.map((item) => (
                 <div key={item.id} className="border p-4 rounded">
                   {item.titulo}
                 </div>
