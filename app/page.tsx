@@ -1,7 +1,5 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -48,11 +46,12 @@ export default function BuscarPage() {
     };
 
     fetchResults();
-  }, [query]);
+  }, [query, supabase]);
 
   return (
     <>
       <Header />
+
       <InternalLayout>
         <div className="container mx-auto px-4 py-8">
           <h1 className="text-3xl font-bold mb-6">
@@ -74,6 +73,7 @@ export default function BuscarPage() {
           )}
         </div>
       </InternalLayout>
+
       <Footer />
     </>
   );

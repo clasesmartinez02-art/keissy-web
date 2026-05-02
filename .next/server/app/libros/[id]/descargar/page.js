@@ -1,0 +1,13 @@
+var R=require("../../../../chunks/ssr/[turbopack]_runtime.js")("server/app/libros/[id]/descargar/page.js")
+R.c("server/chunks/ssr/[root-of-the-server]__0kp3vis._.js")
+R.c("server/chunks/ssr/0~6-_next_dist_esm_build_templates_app-page_0wu7z9~.js")
+R.c("server/chunks/ssr/[root-of-the-server]__00t.dzj._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__0qr1_do._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__103i-bj._.js")
+R.c("server/chunks/ssr/0~6-_next_dist_client_components_0.2nujc._.js")
+R.c("server/chunks/ssr/0~6-_next_dist_client_components_builtin_forbidden_05pjf~9.js")
+R.c("server/chunks/ssr/0~6-_next_dist_client_components_builtin_unauthorized_0hezklo.js")
+R.c("server/chunks/ssr/0~6-_next_dist_client_components_builtin_global-error_0nm1a1u.js")
+R.c("server/chunks/ssr/0ii7_keissy-web__next-internal_server_app_libros_[id]_descargar_page_actions_0936k0h.js")
+R.m(55237)
+module.exports=R.m(55237).exports
