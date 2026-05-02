@@ -14,31 +14,42 @@ type ResultItem = {
 
 export default function BuscarPage() {
   const searchParams = useSearchParams();
-  const query = searchParams.get("q") || "";
+  const query = searchParams.get("q")?.trim() || "";
 
   const [results, setResults] = useState<ResultItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const supabase = createClient();
+  // ✅ cliente estable (NO se recrea)
+  const [supabase] = useState(() => createClient());
 
   useEffect(() => {
     const fetchResults = async () => {
-      setLoading(true);
-
       if (!query) {
         setResults([]);
-        setLoading(false);
+        setErrorMsg("");
         return;
       }
 
-      const { data, error } = await supabase
-        .from("tu_tabla")
-        .select("*")
-        .ilike("titulo", `%${query}%`);
+      setLoading(true);
+      setErrorMsg("");
 
-      if (!error && data) {
-        setResults(data as ResultItem[]);
-      } else {
+      try {
+        const { data, error } = await supabase
+          .from("libros") // 🔥 CAMBIA ESTO si tu tabla tiene otro nombre
+          .select("id, titulo")
+          .ilike("titulo", `%${query}%`);
+
+        if (error) {
+          console.error("Supabase error:", error);
+          setErrorMsg("Error buscando datos");
+          setResults([]);
+        } else {
+          setResults(data ?? []);
+        }
+      } catch (err) {
+        console.error("Error inesperado:", err);
+        setErrorMsg("Error inesperado");
         setResults([]);
       }
 
@@ -55,17 +66,32 @@ export default function BuscarPage() {
       <InternalLayout>
         <div className="container mx-auto px-4 py-8">
           <h1 className="text-3xl font-bold mb-6">
-            Resultados para: "{query}"
+            {query ? `Resultados para: "${query}"` : "Buscar contenido"}
           </h1>
 
-          {loading ? (
-            <p>Cargando...</p>
-          ) : results.length === 0 ? (
+          {!query && (
+            <p className="text-gray-500">
+              Escribe algo en el buscador...
+            </p>
+          )}
+
+          {loading && <p>Cargando...</p>}
+
+          {errorMsg && (
+            <p className="text-red-500">{errorMsg}</p>
+          )}
+
+          {!loading && !errorMsg && query && results.length === 0 && (
             <p>No se encontraron resultados.</p>
-          ) : (
+          )}
+
+          {!loading && results.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {results.map((item) => (
-                <div key={item.id} className="border p-4 rounded">
+                <div
+                  key={item.id}
+                  className="border p-4 rounded shadow hover:shadow-lg transition"
+                >
                   {item.titulo}
                 </div>
               ))}
