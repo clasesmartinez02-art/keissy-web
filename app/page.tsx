@@ -1,13 +1,13 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Header } from "@/components/header";
 import { InternalLayout } from "@/components/internal-layout";
 import { Footer } from "@/components/footer";
-
-export const dynamic = "force-dynamic";
 
 type ResultItem = {
   id: string | number;
